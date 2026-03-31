@@ -1,10 +1,149 @@
 # npm postinstall attack scanner
 
+[日本語](#日本語) | [English](#english)
+
+---
+
+## 日本語
+
+npmサプライチェーン攻撃（**postinstall + 偽依存関係パターン**）を検出するスキャナー。
+
+[axios メンテナーアカウント乗っ取り事件（2026-03-31）](https://x.com/riku720720/status/2038976598914019546)をきっかけに作成。
+
+### 攻撃パターン
+
+1. 攻撃者がnpmメンテナーのアカウントを乗っ取り（メール変更等でpublish権限を掌握）
+2. `package.json`に**偽の依存関係を追加**して新バージョンを公開（ソースコード自体は変更なし）
+3. 偽パッケージの**postinstallスクリプト**が実行され：
+   - C&Cサーバーに接続
+   - プラットフォーム別のRAT（Remote Access Trojan）をダウンロード・実行
+   - 自分自身を削除して痕跡を隠蔽
+4. `^`（キャレット）指定で`npm install`/`npm update`すると自動的に感染
+
+**なぜ検出が難しいか**: パッケージ本体のソースコードは完全にクリーン。悪意は間接依存のinstallスクリプトに隠れている。
+
+### 使い方
+
+```bash
+# カレントディレクトリをスキャン
+bash scan.sh .
+
+# 特定プロジェクトをスキャン
+bash scan.sh /path/to/your/project
+
+# ワークスペース全体をスキャン
+bash scan.sh /path/to/workspace
+```
+
+### チェック内容（5フェーズ）
+
+| フェーズ | 内容 | 方法 |
+|---------|------|------|
+| 1 | **既知の侵害バージョン** | lockfile + node_modules内のバージョン照合 |
+| 2 | **悪意ある依存パッケージ** | 既知のマルウェアパッケージ名を検索（例: `plain-crypto-js`） |
+| 3 | **不審なpostinstallスクリプト** | eval/exec/ネットワーク呼び出しのパターンマッチ |
+| 4 | **危険なバージョン範囲** | 攻撃対象パッケージの `^`/`~` 範囲指定を検出 |
+| 5 | **npmキャッシュ** | キャッシュ内の侵害パッケージ残留を検出 |
+
+### 出力例
+
+クリーンなプロジェクトの場合:
+```
+=== npm postinstall attack scanner ===
+[Phase 1] Known compromised version check
+  [OK] Known compromised versions not found
+[Phase 2] Malicious dependency check
+  [OK] Known malicious dependencies not found
+[Phase 3] Suspicious postinstall script detection
+  [OK] No suspicious postinstall scripts detected
+[Phase 4] Dangerous version range check
+  [OK] No dangerous version ranges on known-targeted packages
+[Phase 5] npm cache check
+  [OK] No compromised packages in npm cache
+=== Scan Summary ===
+No issues found. Project appears clean.
+```
+
+終了コード: `0` = 問題なし、`1` = 問題あり
+
+### GitHub Actionsで使う
+
+リポジトリの `.github/workflows/scan.yml` に追加:
+
+```yaml
+name: npm postinstall attack scan
+
+on:
+  push:
+    paths: ['package.json', 'package-lock.json']
+  pull_request:
+    paths: ['package.json', 'package-lock.json']
+  schedule:
+    - cron: '0 9 * * *'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download scanner
+        run: curl -sL https://raw.githubusercontent.com/aliksir/npm-postinstall-attack-scanner/main/scan.sh -o /tmp/scan.sh
+      - name: Run scan
+        run: bash /tmp/scan.sh .
+```
+
+### 既知の侵害パッケージ
+
+| パッケージ | バージョン | 悪意ある依存 | 発生日 | C&C |
+|-----------|-----------|------------|--------|-----|
+| axios | 1.14.1 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
+| axios | 0.30.4 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
+
+### 新しい攻撃が発覚したら
+
+`scan.sh` の配列に追記するだけ:
+
+```bash
+KNOWN_COMPROMISED=(
+  # ... 既存エントリ ...
+  "new-package@bad-version|malicious-dep|説明"
+)
+
+KNOWN_MALICIOUS_DEPS=(
+  # ... 既存エントリ ...
+  "malicious-dep"
+)
+```
+
+### 侵害が検出された場合の対応
+
+1. **安全なバージョンに固定**: `npm install axios@1.14.0`
+2. **node_modules再構築**: `rm -rf node_modules package-lock.json && npm install`
+3. **npmキャッシュクリア**: `npm cache clean --force`
+4. **シークレットのローテーション**（RAT実行の可能性がある場合）: APIキー、トークン、SSH鍵、DB認証情報、ウォレット秘密鍵
+5. **RAT痕跡の確認**: 不審なプロセス、スケジュールタスク/cron、スタートアップ登録
+
+### 予防策
+
+- 依存バージョンをピン留め（`"1.14.0"` であって `"^1.14.0"` ではなく）
+- npm 2FAを有効化（ハードウェアキー推奨）
+- CI/CDでは `npm ci` を使用（lockfileの整合性チェック）
+- `.npmrc` に `min-release-age=7` を設定
+- [Trusted Publisher](https://docs.npmjs.com/generating-provenance-statements)（GitHub OIDC）を活用
+
+### Claude Code連携
+
+このスキャナーは [Claude Code](https://claude.ai/claude-code) のスキルとしても使えます。`claude-code/` ディレクトリを `~/.claude/skills/npm-postinstall-attack-scanner/` にコピーすれば、`/npm-postinstall-attack-scanner` で呼び出せます。
+
+---
+
+## English
+
 Detects npm supply chain attacks that use the **postinstall + hidden dependency** pattern to deliver malware.
 
 Built in response to the [axios maintainer account takeover (2026-03-31)](https://x.com/riku720720/status/2038976598914019546).
 
-## The Attack Pattern
+### The Attack Pattern
 
 1. Attacker takes over an npm maintainer account (email change, credential theft)
 2. Publishes a new version with a **malicious dependency** added to `package.json` (source code is untouched)
@@ -16,7 +155,7 @@ Built in response to the [axios maintainer account takeover (2026-03-31)](https:
 
 **Why it's hard to detect**: The package source code is completely clean. The malice is hidden in a transitive dependency's install script.
 
-## Quick Start
+### Quick Start
 
 ```bash
 # Scan current directory
@@ -29,7 +168,7 @@ bash scan.sh /path/to/your/project
 bash scan.sh /path/to/workspace
 ```
 
-## What It Checks (5 Phases)
+### What It Checks (5 Phases)
 
 | Phase | What | How |
 |-------|------|-----|
@@ -39,7 +178,7 @@ bash scan.sh /path/to/workspace
 | 4 | **Dangerous version ranges** | Detects `^`/`~` ranges on targeted packages |
 | 5 | **npm cache** | Checks if compromised packages are cached locally |
 
-## Output
+### Output
 
 Clean project:
 ```
@@ -60,7 +199,7 @@ No issues found. Project appears clean.
 
 Exit codes: `0` = clean, `1` = issues found.
 
-## GitHub Actions
+### GitHub Actions
 
 Add to your repo's `.github/workflows/scan.yml`:
 
@@ -86,14 +225,14 @@ jobs:
         run: bash /tmp/scan.sh .
 ```
 
-## Known Compromised Packages
+### Known Compromised Packages
 
 | Package | Version | Malicious Dep | Date | C&C |
 |---------|---------|---------------|------|-----|
 | axios | 1.14.1 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
 | axios | 0.30.4 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
 
-## Adding New Entries
+### Adding New Entries
 
 When a new attack is discovered, edit `scan.sh` and add to the arrays:
 
@@ -109,7 +248,7 @@ KNOWN_MALICIOUS_DEPS=(
 )
 ```
 
-## Remediation
+### Remediation
 
 If compromised packages are found:
 
@@ -119,7 +258,7 @@ If compromised packages are found:
 4. **Rotate secrets** (if RAT may have executed): API keys, tokens, SSH keys, DB credentials, wallet keys
 5. **Check for RAT artifacts**: unexpected processes, new scheduled tasks, modified startup files
 
-## Prevention
+### Prevention
 
 - Pin dependency versions exactly (`"1.14.0"`, not `"^1.14.0"`)
 - Enable npm 2FA with hardware key
@@ -127,7 +266,7 @@ If compromised packages are found:
 - Add `min-release-age=7` to `.npmrc`
 - Use [Trusted Publisher](https://docs.npmjs.com/generating-provenance-statements) (GitHub OIDC)
 
-## Claude Code Integration
+### Claude Code Integration
 
 This scanner is also available as a [Claude Code](https://claude.ai/claude-code) skill. Copy the `claude-code/` directory to `~/.claude/skills/npm-postinstall-attack-scanner/` to use it with `/npm-postinstall-attack-scanner`.
 
