@@ -1,0 +1,136 @@
+# npm postinstall attack scanner
+
+Detects npm supply chain attacks that use the **postinstall + hidden dependency** pattern to deliver malware.
+
+Built in response to the [axios maintainer account takeover (2026-03-31)](https://x.com/riku720720/status/2038976598914019546).
+
+## The Attack Pattern
+
+1. Attacker takes over an npm maintainer account (email change, credential theft)
+2. Publishes a new version with a **malicious dependency** added to `package.json` (source code is untouched)
+3. The malicious dependency runs a **postinstall script** that:
+   - Contacts a C&C server
+   - Downloads a platform-specific RAT (Remote Access Trojan)
+   - Self-deletes to hide evidence
+4. Anyone running `npm install` or `npm update` with `^` version ranges gets infected
+
+**Why it's hard to detect**: The package source code is completely clean. The malice is hidden in a transitive dependency's install script.
+
+## Quick Start
+
+```bash
+# Scan current directory
+bash scan.sh .
+
+# Scan a specific project
+bash scan.sh /path/to/your/project
+
+# Scan all projects
+bash scan.sh /path/to/workspace
+```
+
+## What It Checks (5 Phases)
+
+| Phase | What | How |
+|-------|------|-----|
+| 1 | **Known compromised versions** | Checks lockfile + node_modules for exact version matches |
+| 2 | **Malicious dependencies** | Searches for known malware packages (e.g., `plain-crypto-js`) |
+| 3 | **Suspicious postinstall scripts** | Pattern-matches for eval/exec/network calls in install scripts |
+| 4 | **Dangerous version ranges** | Detects `^`/`~` ranges on targeted packages |
+| 5 | **npm cache** | Checks if compromised packages are cached locally |
+
+## Output
+
+Clean project:
+```
+=== npm postinstall attack scanner ===
+[Phase 1] Known compromised version check
+  [OK] Known compromised versions not found
+[Phase 2] Malicious dependency check
+  [OK] Known malicious dependencies not found
+[Phase 3] Suspicious postinstall script detection
+  [OK] No suspicious postinstall scripts detected
+[Phase 4] Dangerous version range check
+  [OK] No dangerous version ranges on known-targeted packages
+[Phase 5] npm cache check
+  [OK] No compromised packages in npm cache
+=== Scan Summary ===
+No issues found. Project appears clean.
+```
+
+Exit codes: `0` = clean, `1` = issues found.
+
+## GitHub Actions
+
+Add to your repo's `.github/workflows/scan.yml`:
+
+```yaml
+name: npm postinstall attack scan
+
+on:
+  push:
+    paths: ['package.json', 'package-lock.json']
+  pull_request:
+    paths: ['package.json', 'package-lock.json']
+  schedule:
+    - cron: '0 9 * * *'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download scanner
+        run: curl -sL https://raw.githubusercontent.com/aliksir/npm-postinstall-attack-scanner/main/scan.sh -o /tmp/scan.sh
+      - name: Run scan
+        run: bash /tmp/scan.sh .
+```
+
+## Known Compromised Packages
+
+| Package | Version | Malicious Dep | Date | C&C |
+|---------|---------|---------------|------|-----|
+| axios | 1.14.1 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
+| axios | 0.30.4 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
+
+## Adding New Entries
+
+When a new attack is discovered, edit `scan.sh` and add to the arrays:
+
+```bash
+KNOWN_COMPROMISED=(
+  # ... existing entries ...
+  "new-package@bad-version|malicious-dep|description"
+)
+
+KNOWN_MALICIOUS_DEPS=(
+  # ... existing entries ...
+  "malicious-dep"
+)
+```
+
+## Remediation
+
+If compromised packages are found:
+
+1. **Pin to safe version**: `npm install axios@1.14.0`
+2. **Rebuild**: `rm -rf node_modules package-lock.json && npm install`
+3. **Clear cache**: `npm cache clean --force`
+4. **Rotate secrets** (if RAT may have executed): API keys, tokens, SSH keys, DB credentials, wallet keys
+5. **Check for RAT artifacts**: unexpected processes, new scheduled tasks, modified startup files
+
+## Prevention
+
+- Pin dependency versions exactly (`"1.14.0"`, not `"^1.14.0"`)
+- Enable npm 2FA with hardware key
+- Use `npm ci` in CI/CD (lockfile integrity check)
+- Add `min-release-age=7` to `.npmrc`
+- Use [Trusted Publisher](https://docs.npmjs.com/generating-provenance-statements) (GitHub OIDC)
+
+## Claude Code Integration
+
+This scanner is also available as a [Claude Code](https://claude.ai/claude-code) skill. Copy the `claude-code/` directory to `~/.claude/skills/npm-postinstall-attack-scanner/` to use it with `/npm-postinstall-attack-scanner`.
+
+## License
+
+MIT

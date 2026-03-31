@@ -1,0 +1,30 @@
+name: npm postinstall attack scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+  schedule:
+    # Run daily at 09:00 UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download scanner
+        run: |
+          curl -sL https://raw.githubusercontent.com/aliksir/npm-postinstall-attack-scanner/main/scan.sh -o /tmp/scan.sh
+          chmod +x /tmp/scan.sh
+
+      - name: Run postinstall attack scan
+        run: bash /tmp/scan.sh .
