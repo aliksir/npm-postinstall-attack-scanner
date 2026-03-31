@@ -22,6 +22,19 @@ npmサプライチェーン攻撃（**postinstall + 偽依存関係パターン*
 
 **なぜ検出が難しいか**: パッケージ本体のソースコードは完全にクリーン。悪意は間接依存のinstallスクリプトに隠れている。
 
+### 導入方法
+
+```bash
+# リポジトリをクローン
+git clone https://github.com/aliksir/npm-postinstall-attack-scanner.git
+cd npm-postinstall-attack-scanner
+
+# または、スクリプトだけダウンロード
+curl -sL https://raw.githubusercontent.com/aliksir/npm-postinstall-attack-scanner/master/scan.sh -o scan.sh
+```
+
+必要なもの: `bash` と `npm`（Node.jsプロジェクトがあれば入っているはず）
+
 ### 使い方
 
 ```bash
@@ -34,6 +47,8 @@ bash scan.sh /path/to/your/project
 # ワークスペース全体をスキャン
 bash scan.sh /path/to/workspace
 ```
+
+問題が見つかれば対策手順が自動表示されます。
 
 ### チェック内容（5フェーズ）
 
@@ -162,6 +177,19 @@ Built in response to the [axios maintainer account takeover (2026-03-31)](https:
 
 **Why it's hard to detect**: The package source code is completely clean. The malice is hidden in a transitive dependency's install script.
 
+### Installation
+
+```bash
+# Clone the repo
+git clone https://github.com/aliksir/npm-postinstall-attack-scanner.git
+cd npm-postinstall-attack-scanner
+
+# Or just download the script
+curl -sL https://raw.githubusercontent.com/aliksir/npm-postinstall-attack-scanner/master/scan.sh -o scan.sh
+```
+
+Requirements: `bash` and `npm` (you already have these if you work with Node.js)
+
 ### Quick Start
 
 ```bash
@@ -174,6 +202,8 @@ bash scan.sh /path/to/your/project
 # Scan all projects
 bash scan.sh /path/to/workspace
 ```
+
+If issues are found, remediation steps are displayed automatically.
 
 ### What It Checks (5 Phases)
 
