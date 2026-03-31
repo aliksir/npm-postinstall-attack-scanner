@@ -135,6 +135,13 @@ KNOWN_MALICIOUS_DEPS=(
 
 このスキャナーは [Claude Code](https://claude.ai/claude-code) のスキルとしても使えます。`claude-code/` ディレクトリを `~/.claude/skills/npm-postinstall-attack-scanner/` にコピーすれば、`/npm-postinstall-attack-scanner` で呼び出せます。
 
+### 免責事項
+
+- 本ツールは**既知のパターンに基づく簡易検出ツール**です。全ての攻撃の検出を保証するものではありません。
+- `npm audit` / `osv-scanner` / `trivy` 等の他のセキュリティツールとの併用を推奨します。
+- 本ツールの使用により生じた損害について、作者は一切の責任を負いません。
+- 既知の侵害パッケージDBは最新でない場合があります。公式情報と併せてご確認ください。
+
 ---
 
 ## English
@@ -269,6 +276,20 @@ If compromised packages are found:
 ### Claude Code Integration
 
 This scanner is also available as a [Claude Code](https://claude.ai/claude-code) skill. Copy the `claude-code/` directory to `~/.claude/skills/npm-postinstall-attack-scanner/` to use it with `/npm-postinstall-attack-scanner`.
+
+## Disclaimer / 免責事項
+
+- This tool detects **known patterns only**. It does not guarantee detection of all supply chain attacks.
+- Always use in combination with other security tools (`npm audit`, `osv-scanner`, `trivy`, etc.).
+- The author assumes no liability for any damages resulting from the use of this tool.
+- The known compromised packages database may not be up to date. Always verify with official sources.
+
+---
+
+- 本ツールは**既知のパターンに基づく簡易検出ツール**です。全ての攻撃の検出を保証するものではありません。
+- `npm audit` / `osv-scanner` / `trivy` 等の他のセキュリティツールとの併用を推奨します。
+- 本ツールの使用により生じた損害について、作者は一切の責任を負いません。
+- 既知の侵害パッケージDBは最新でない場合があります。公式情報と併せてご確認ください。
 
 ## License
 
