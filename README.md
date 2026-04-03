@@ -22,6 +22,8 @@ npmサプライチェーン攻撃（**postinstall + 偽依存関係パターン*
 
 **なぜ検出が難しいか**: パッケージ本体のソースコードは完全にクリーン。悪意は間接依存のinstallスクリプトに隠れている。
 
+**亜種パターン（2026-04-03 `mgc`）**: 偽依存ではなく、パッケージ自体のpostinstallスクリプトがGitHub Gistからプラットフォーム別ペイロードをダウンロード・実行し、C2サーバーに接続する。
+
 ### 導入方法
 
 ```bash
@@ -59,6 +61,7 @@ bash scan.sh /path/to/workspace
 | 3 | **不審なpostinstallスクリプト** | eval/exec/ネットワーク呼び出しのパターンマッチ |
 | 4 | **危険なバージョン範囲** | 攻撃対象パッケージの `^`/`~` 範囲指定を検出 |
 | 5 | **npmキャッシュ** | キャッシュ内の侵害パッケージ残留を検出 |
+| 6 | **C2ドメイン/ペイロードホスト** | 既知のC2・GitHub Gistペイロードホストをスクリプト内から検出 |
 
 ### 出力例
 
@@ -109,10 +112,11 @@ jobs:
 
 ### 既知の侵害パッケージ
 
-| パッケージ | バージョン | 悪意ある依存 | 発生日 | C&C |
-|-----------|-----------|------------|--------|-----|
+| パッケージ | バージョン | 悪意ある依存/手法 | 発生日 | C&C |
+|-----------|-----------|------------------|--------|-----|
 | axios | 1.14.1 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
 | axios | 0.30.4 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
+| mgc | 1.2.1-1.2.4 | 自身のpostinstall（GitHub Gistペイロード） | 2026-04-03 | admondtamang.com.np |
 
 ### 新しい攻撃が発覚したら
 
@@ -177,6 +181,8 @@ Built in response to the [axios maintainer account takeover (2026-03-31)](https:
 
 **Why it's hard to detect**: The package source code is completely clean. The malice is hidden in a transitive dependency's install script.
 
+**Variant pattern (2026-04-03 `mgc`)**: Instead of a fake dependency, the package's own postinstall script downloads platform-specific payloads from GitHub Gists and connects to a C2 server.
+
 ### Installation
 
 ```bash
@@ -214,6 +220,7 @@ If issues are found, remediation steps are displayed automatically.
 | 3 | **Suspicious postinstall scripts** | Pattern-matches for eval/exec/network calls in install scripts |
 | 4 | **Dangerous version ranges** | Detects `^`/`~` ranges on targeted packages |
 | 5 | **npm cache** | Checks if compromised packages are cached locally |
+| 6 | **C2 domain / payload host** | Detects known C2 domains and GitHub Gist payload hosts in scripts |
 
 ### Output
 
@@ -264,10 +271,11 @@ jobs:
 
 ### Known Compromised Packages
 
-| Package | Version | Malicious Dep | Date | C&C |
-|---------|---------|---------------|------|-----|
+| Package | Version | Malicious Dep / Method | Date | C&C |
+|---------|---------|----------------------|------|-----|
 | axios | 1.14.1 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
 | axios | 0.30.4 | plain-crypto-js@^4.2.1 | 2026-03-31 | sfrclak.com:8000 |
+| mgc | 1.2.1-1.2.4 | Self postinstall (GitHub Gist payload) | 2026-04-03 | admondtamang.com.np |
 
 ### Adding New Entries
 

@@ -2,6 +2,7 @@
 # npm postinstall attack scanner
 # Detects compromised packages using the postinstall + hidden dependency pattern
 # (e.g., axios@1.14.1/0.30.4 supply chain attack, 2026-03-31)
+# (e.g., mgc@1.2.1-1.2.4 Axios variant with GitHub-hosted payloads, 2026-04-03)
 #
 # Usage: bash scan.sh [target-directory]
 # Exit codes: 0 = clean, 1 = issues found
@@ -35,11 +36,26 @@ echo ""
 KNOWN_COMPROMISED=(
   "axios@1.14.1|plain-crypto-js|axios maintainer account takeover (2026-03-31)"
   "axios@0.30.4|plain-crypto-js|axios maintainer account takeover (2026-03-31)"
+  "mgc@1.2.1|mgc|Axios variant: GitHub-hosted payload + C2 admondtamang.com.np (2026-04-03)"
+  "mgc@1.2.2|mgc|Axios variant: GitHub-hosted payload + C2 admondtamang.com.np (2026-04-03)"
+  "mgc@1.2.3|mgc|Axios variant: GitHub-hosted payload + C2 admondtamang.com.np (2026-04-03)"
+  "mgc@1.2.4|mgc|Axios variant: GitHub-hosted payload + C2 admondtamang.com.np (2026-04-03)"
 )
 
 # Known malicious packages (dependency side)
 KNOWN_MALICIOUS_DEPS=(
   "plain-crypto-js"
+  "mgc"
+)
+
+# Known C2 domains / payload hosts
+KNOWN_C2_DOMAINS=(
+  "sfrclak.com"
+  "admondtamang.com.np"
+)
+
+KNOWN_PAYLOAD_HOSTS=(
+  "gist.githubusercontent.com/admondtamang"
 )
 
 # ============================================================
@@ -135,7 +151,7 @@ while IFS= read -r pjson; do
       if [[ "$script_ref" == *".js"* ]]; then
         script_file="$local_dir/$script_ref"
         if [[ -f "$script_file" ]]; then
-          if grep -qiE '(eval\(|new Function|child_process|\.connect\(|net\.Socket|http\.request|https\.request|Buffer\.from.*base64|\\x[0-9a-f]{2}|String\.fromCharCode|execSync|spawnSync)' "$script_file" 2>/dev/null; then
+          if grep -qiE '(eval\(|new Function|child_process|\.connect\(|net\.Socket|http\.request|https\.request|Buffer\.from.*base64|\\x[0-9a-f]{2}|String\.fromCharCode|execSync|spawnSync|gist\.githubusercontent\.com)' "$script_file" 2>/dev/null; then
             echo -e "  ${YELLOW}[WARN] $pkg_name: suspicious postinstall script${NC}"
             echo -e "  ${YELLOW}  -> File: $script_file${NC}"
             match=$(grep -m1 -iE '(eval\(|new Function|child_process|\.connect\(|net\.Socket|http\.request|Buffer\.from.*base64|execSync|spawnSync)' "$script_file" 2>/dev/null | head -c 120)
@@ -207,6 +223,47 @@ else
 fi
 
 # ============================================================
+# Phase 6: C2 domain / payload host detection in scripts
+# ============================================================
+echo ""
+echo -e "${CYAN}[Phase 6] C2 domain / payload host detection${NC}"
+
+PHASE6_ISSUES=0
+while IFS= read -r pjson || [[ -n "$pjson" ]]; do
+  [[ -z "$pjson" ]] && continue
+  local_dir=$(dirname "$pjson")
+  pkg_name=$(grep -o '"name": "[^"]*"' "$pjson" 2>/dev/null | head -1 | sed 's/"name": "//;s/"//' || true)
+  [[ -z "$pkg_name" ]] && pkg_name="(unknown)"
+
+  # Check all .js files in the package directory (not subdirectories)
+  while IFS= read -r jsfile || [[ -n "$jsfile" ]]; do
+    [[ -z "$jsfile" ]] && continue
+    for c2 in "${KNOWN_C2_DOMAINS[@]}"; do
+      if grep -q "$c2" "$jsfile" 2>/dev/null; then
+        echo -e "  ${RED}[CRITICAL] $pkg_name: C2 domain '$c2' found in $jsfile${NC}"
+        match=$(grep -m1 "$c2" "$jsfile" 2>/dev/null | head -c 120)
+        echo -e "  ${RED}  -> Match: $match${NC}"
+        PHASE6_ISSUES=$((PHASE6_ISSUES + 1))
+        FOUND_ISSUES=$((FOUND_ISSUES + 1))
+      fi
+    done
+    for host in "${KNOWN_PAYLOAD_HOSTS[@]}"; do
+      if grep -q "$host" "$jsfile" 2>/dev/null; then
+        echo -e "  ${RED}[CRITICAL] $pkg_name: payload host '$host' found in $jsfile${NC}"
+        match=$(grep -m1 "$host" "$jsfile" 2>/dev/null | head -c 120)
+        echo -e "  ${RED}  -> Match: $match${NC}"
+        PHASE6_ISSUES=$((PHASE6_ISSUES + 1))
+        FOUND_ISSUES=$((FOUND_ISSUES + 1))
+      fi
+    done
+  done < <(find "$local_dir" -maxdepth 1 -name "*.js" 2>/dev/null || true)
+done < <(find "$TARGET_DIR" -path "*/node_modules/*/package.json" -not -path "*/node_modules/*/node_modules/*" 2>/dev/null | head -500)
+
+if [[ $PHASE6_ISSUES -eq 0 ]]; then
+  echo -e "  ${GREEN}[OK] No known C2 domains or payload hosts detected${NC}"
+fi
+
+# ============================================================
 # Summary
 # ============================================================
 echo ""
@@ -215,8 +272,9 @@ if [[ $FOUND_ISSUES -gt 0 ]]; then
   echo -e "${RED}Found $FOUND_ISSUES issue(s)!${NC}"
   echo ""
   echo -e "${YELLOW}=== Remediation Steps ===${NC}"
-  echo "1. Pin affected packages to safe versions:"
+  echo "1. Remove/pin affected packages:"
   echo "   npm install axios@1.14.0   # or axios@0.30.3"
+  echo "   npm uninstall mgc          # if installed"
   echo ""
   echo "2. Rebuild node_modules:"
   echo "   rm -rf node_modules package-lock.json && npm install"
