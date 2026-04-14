@@ -29,7 +29,7 @@ The script checks 5 phases:
 ## Remediation
 
 If issues are found:
-1. Pin to safe version: `npm install axios@1.14.0`
+1. Pin to safe version: `npm install axios@1.15.0`
 2. Rebuild: `rm -rf node_modules package-lock.json && npm install`
 3. Clear cache: `npm cache clean --force`
 4. Rotate all secrets if RAT may have executed

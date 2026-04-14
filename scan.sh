@@ -273,7 +273,7 @@ if [[ $FOUND_ISSUES -gt 0 ]]; then
   echo ""
   echo -e "${YELLOW}=== Remediation Steps ===${NC}"
   echo "1. Remove/pin affected packages:"
-  echo "   npm install axios@1.14.0   # or axios@0.30.3"
+  echo "   npm install axios@1.15.0   # or axios@0.30.3"
   echo "   npm uninstall mgc          # if installed"
   echo ""
   echo "2. Rebuild node_modules:"

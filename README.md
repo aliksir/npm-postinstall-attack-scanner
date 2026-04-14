@@ -136,7 +136,7 @@ KNOWN_MALICIOUS_DEPS=(
 
 ### 侵害が検出された場合の対応
 
-1. **安全なバージョンに固定**: `npm install axios@1.14.0`
+1. **安全なバージョンに固定**: `npm install axios@1.15.0`
 2. **node_modules再構築**: `rm -rf node_modules package-lock.json && npm install`
 3. **npmキャッシュクリア**: `npm cache clean --force`
 4. **シークレットのローテーション**（RAT実行の可能性がある場合）: APIキー、トークン、SSH鍵、DB認証情報、ウォレット秘密鍵
@@ -144,7 +144,7 @@ KNOWN_MALICIOUS_DEPS=(
 
 ### 予防策
 
-- 依存バージョンをピン留め（`"1.14.0"` であって `"^1.14.0"` ではなく）
+- 依存バージョンをピン留め（`"1.15.0"` であって `"^1.15.0"` ではなく）
 - npm 2FAを有効化（ハードウェアキー推奨）
 - CI/CDでは `npm ci` を使用（lockfileの整合性チェック）
 - `.npmrc` に `min-release-age=7` を設定
@@ -297,7 +297,7 @@ KNOWN_MALICIOUS_DEPS=(
 
 If compromised packages are found:
 
-1. **Pin to safe version**: `npm install axios@1.14.0`
+1. **Pin to safe version**: `npm install axios@1.15.0`
 2. **Rebuild**: `rm -rf node_modules package-lock.json && npm install`
 3. **Clear cache**: `npm cache clean --force`
 4. **Rotate secrets** (if RAT may have executed): API keys, tokens, SSH keys, DB credentials, wallet keys
@@ -305,7 +305,7 @@ If compromised packages are found:
 
 ### Prevention
 
-- Pin dependency versions exactly (`"1.14.0"`, not `"^1.14.0"`)
+- Pin dependency versions exactly (`"1.15.0"`, not `"^1.15.0"`)
 - Enable npm 2FA with hardware key
 - Use `npm ci` in CI/CD (lockfile integrity check)
 - Add `min-release-age=7` to `.npmrc`
