@@ -105,7 +105,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Download scanner
-        run: curl -sL https://raw.githubusercontent.com/aliksir/npm-postinstall-attack-scanner/main/scan.sh -o /tmp/scan.sh
+        run: curl -sL https://raw.githubusercontent.com/aliksir/npm-postinstall-attack-scanner/master/scan.sh -o /tmp/scan.sh
       - name: Run scan
         run: bash /tmp/scan.sh .
 ```
@@ -264,7 +264,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Download scanner
-        run: curl -sL https://raw.githubusercontent.com/aliksir/npm-postinstall-attack-scanner/main/scan.sh -o /tmp/scan.sh
+        run: curl -sL https://raw.githubusercontent.com/aliksir/npm-postinstall-attack-scanner/master/scan.sh -o /tmp/scan.sh
       - name: Run scan
         run: bash /tmp/scan.sh .
 ```
