@@ -1,0 +1,97 @@
+name: keepalive
+
+# GitHub は public リポジトリで 60 日間活動がないと schedule のワークフローを自動で無効化する。
+# このワークフローはその自動無効化への対策で、独立した 2 経路を併走させる。
+#   経路1: 対象ワークフローが無効化されていたら enable API で明示的に復活させる
+#   経路2: 30 日以上コミットが無ければ空コミットを積み、そもそも無効化させない
+# 2 経路持つのは、経路2 の前提である「bot の空コミットが GitHub の言う repository activity
+# として数えられるか」が未検証のため。数えられなければ経路2 は空振りする。
+# 経路1 は activity の定義に依存しないので、どちらか一方が効けば目的を達する。
+#
+# ループしない理由:
+#   1. このワークフロー自体は on: push を持たない（schedule と workflow_dispatch のみ）ため、
+#      自分が積んだコミットで自分が再実行されることはない。
+#   2. GITHUB_TOKEN で push したコミットは、GitHub の仕様上あらたなワークフロー実行をトリガーしない。
+#   3. scan.yml の push トリガーは paths が package.json / package-lock.json 限定なので、
+#      ファイルを一切変更しない空コミットではマッチしない。
+#   4. 仮に連続実行されても、直前のコミットからの経過日数が閾値未満になるので空コミットは積まれない。
+
+on:
+  schedule:
+    # 毎週月曜 03:17 UTC に判定する。正時は実行が集中して遅延しやすいため意図的にずらしている。
+    # 週次で判定するのは、schedule の遅延やスキップが数回起きても 60 日に届かせないため。
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+# 空コミットの push に contents、無効化されたワークフローの復活に actions の書き込みが要る
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      # 直近コミットの日時取得と空コミット 1 個の push しかしないので浅いクローンで足りる
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # 経路1。scan ワークフローの状態を API で確認し、無効化されていれば明示的に復活させる。
+      # 経路2 より先に置くのは、後段の push が失敗しても復活処理だけは済ませておくため。
+      # best-effort とし、API が失敗してもジョブ全体は落とさない。ただし握り潰さず警告を残す。
+      - name: scan ワークフローが無効化されていれば復活させる（best-effort）
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # 復活させる対象。本来の目的である scan を見張る
+          TARGET_WORKFLOW: scan.yml
+        run: |
+          set -euo pipefail
+
+          # ここから状態取得。失敗してもジョブを落とさないよう if で受けて警告だけ出す
+          gh_err=$(mktemp)
+          if ! state=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${TARGET_WORKFLOW}" --jq .state 2>"${gh_err}"); then
+            echo "::warning::${TARGET_WORKFLOW} の状態取得に失敗した: $(cat "${gh_err}")"
+            exit 0
+          fi
+          echo "${TARGET_WORKFLOW} の現在の状態: ${state}"
+
+          # active 以外（disabled_inactivity / disabled_manually / disabled_fork）なら復活を試みる
+          if [ "${state}" = "active" ]; then
+            echo "有効な状態のため復活処理は不要"
+            exit 0
+          fi
+
+          # ここから復活処理。成否どちらもログに残し、失敗してもジョブは落とさない
+          echo "無効化（${state}）を検知したため enable API を呼ぶ"
+          if gh api --method PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/${TARGET_WORKFLOW}/enable"; then
+            echo "${TARGET_WORKFLOW} の復活に成功した"
+          else
+            echo "::warning::enable API の呼び出しに失敗した。permissions の actions: write と、リポジトリ設定の default_workflow_permissions を確認すること"
+          fi
+
+      # 経路2。最終コミットからの経過日数を見て、必要な場合だけ空コミットを積む
+      - name: 最終コミットからの経過日数を見て必要な場合だけ空コミットを積む
+        env:
+          # 空コミットを積むまでの猶予（日）。無効化の条件が 60 日無活動なので、
+          # 週次判定が数回スキップされても間に合う 30 日を閾値にしている。
+          KEEPALIVE_THRESHOLD_DAYS: '30'
+        run: |
+          set -euo pipefail
+
+          # ここから経過日数の算出。直近コミットの Unix 時刻と現在時刻の差を日数に直す
+          last_commit_epoch=$(git log -1 --format=%ct)
+          elapsed_days=$(( ( $(date +%s) - last_commit_epoch ) / 86400 ))
+          echo "最終コミットからの経過日数: ${elapsed_days} 日 / 閾値: ${KEEPALIVE_THRESHOLD_DAYS} 日"
+
+          # 閾値未満なら開発が続いている状態なので、履歴を汚さないよう何もせず終える
+          if [ "${elapsed_days}" -lt "${KEEPALIVE_THRESHOLD_DAYS}" ]; then
+            echo "閾値未満のため keepalive コミットは不要"
+            exit 0
+          fi
+
+          # ここから先は閾値以上コミットがない場合だけ通る。空コミットを 1 個積んで master に push する
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit --allow-empty -m 'chore: keepalive commit (schedule 自動無効化の防止)'
+          git push origin HEAD:master
